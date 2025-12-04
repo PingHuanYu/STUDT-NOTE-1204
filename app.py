@@ -1,63 +1,43 @@
-from flask import Flask, request, jsonify
+from flask import Flask, render_template, request, redirect, url_for
 from models import db, Note
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///notes.db'  # SQLite 資料庫
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+# 設置資料庫 URI
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///notes.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db.init_app(app)
 
-# 在第一次執行時建立資料庫
-with app.app_context():
-    db.create_all()
-
-# ======================
-# RESTful API
-# ======================
-
-# 1️⃣ 取得所有筆記
-@app.route('/api/notes', methods=['GET'])
-def get_notes():
+# 設置路由來顯示所有筆記
+@app.route('/')
+def index():
+    # 查詢資料庫中所有筆記
     notes = Note.query.all()
-    return jsonify([note.to_dict() for note in notes])
+    # 渲染並返回 index.html，並傳遞筆記資料
+    return render_template('index.html', notes=notes)
 
-# 2️⃣ 取得單一筆記
-@app.route('/api/notes/<int:note_id>', methods=['GET'])
-def get_note(note_id):
-    note = Note.query.get_or_404(note_id)
-    return jsonify(note.to_dict())
+# 設置路由來顯示新增筆記的表單
+@app.route('/new_note', methods=['GET', 'POST'])
+def new_note():
+    if request.method == 'POST':
+        # 取得表單資料
+        title = request.form['title']
+        author = request.form['author']
+        content = request.form['content']
+        
+        # 創建新的 Note 物件並儲存到資料庫
+        new_note = Note(title=title, author=author, content=content)
+        db.session.add(new_note)
+        db.session.commit()
 
-# 3️⃣ 新增筆記
-@app.route('/api/notes', methods=['POST'])
-def create_note():
-    data = request.get_json()
-    new_note = Note(
-        title=data['title'],
-        author=data['author'],
-        content=data['content']
-    )
-    db.session.add(new_note)
-    db.session.commit()
-    return jsonify(new_note.to_dict()), 201
+        # 表單提交後重定向回首頁
+        return redirect(url_for('index'))
+    
+    # 如果是 GET 請求，顯示新增筆記表單
+    return render_template('new_note.html')
 
-# 4️⃣ 更新筆記
-@app.route('/api/notes/<int:note_id>', methods=['PUT'])
-def update_note(note_id):
-    data = request.get_json()
-    note = Note.query.get_or_404(note_id)
-    note.title = data.get('title', note.title)
-    note.author = data.get('author', note.author)
-    note.content = data.get('content', note.content)
-    db.session.commit()
-    return jsonify(note.to_dict())
-
-# 5️⃣ 刪除筆記
-@app.route('/api/notes/<int:note_id>', methods=['DELETE'])
-def delete_note(note_id):
-    note = Note.query.get_or_404(note_id)
-    db.session.delete(note)
-    db.session.commit()
-    return jsonify({"message": "Note deleted successfully."})
-
+# 設置主程式入口
 if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()  # 確保資料表已建立
     app.run(debug=True)
